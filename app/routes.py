@@ -10,7 +10,6 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("CHAT_APP_SECRET_KEY")
 
-
 chat_sessions: Dict[str, ChatSession] = {}
 
 @app.route("/")
@@ -24,7 +23,6 @@ def chat():
     chat_session = _get_user_session()
     chatgpt_message = chat_session.get_chatgpt_response(message)
     return jsonify({"message": chatgpt_message})
-
 
 
 def _get_user_session() -> ChatSession:
