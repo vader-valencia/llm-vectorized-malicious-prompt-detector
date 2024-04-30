@@ -1,5 +1,5 @@
 # llm-vectorized-malicious-prompt-detector
-Detects many-shot jailbreaking in LLMs using vector embeddings. It compares incoming prompts against a database of known vulnerabilities. If similarity exceeds a set threshold, the prompt is blocked, enhancing LLM security.
+This project is a proof-of-concept, black box detector for few-or-many-shot jailbreaking in LLMs using embeddings of the prompt. It compares incoming prompts against a database of known vulnerabilities. If similarity exceeds a set threshold, the prompt is blocked, enhancing LLM security.
 
 # Running the application (Tuned for Windows for the Proof-of-Concept)
 1. Install the dependencies: 

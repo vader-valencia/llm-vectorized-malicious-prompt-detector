@@ -1,5 +1,7 @@
+from database.malicious_embedding_manager import MaliciousEmbeddingManager
 from flask import Flask, render_template, request, session, jsonify
 from typing import Dict
+import asyncio
 
 from flask import Flask
 import os
@@ -9,6 +11,10 @@ from .chat.chat import ChatSession
 load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("CHAT_APP_SECRET_KEY")
+
+# Initialize and load prompts at startup, using singleton pattern
+embedding_manager = MaliciousEmbeddingManager()
+asyncio.run(embedding_manager.load_initial_prompts())
 
 chat_sessions: Dict[str, ChatSession] = {}
 
@@ -21,8 +27,12 @@ def index():
 def chat():
     message: str = request.json['message']
     chat_session = _get_user_session()
-    chatgpt_message = chat_session.get_chatgpt_response(message)
-    return jsonify({"message": chatgpt_message})
+    response = ''
+    if embedding_manager.check_for_malicious_content(message):  
+        response = "The input prompt was flagged by our system as potentially malicious."
+    else:
+        response = chat_session.get_chatgpt_response(message)
+    return jsonify({"message": response})
 
 
 def _get_user_session() -> ChatSession:
