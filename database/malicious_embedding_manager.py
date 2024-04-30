@@ -3,7 +3,9 @@ import csv
 from typing import List
 import string
 
-from langchain_community.vectorstores.pgvector import PGVector
+#from langchain_community.vectorstores.pgvector import PGVector
+from langchain_postgres.vectorstores import PGVector, DistanceStrategy
+
 from langchain_community.embeddings import __getattr__ as get_embedding_class
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
@@ -14,7 +16,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.future import select
 
 from database.database import MaliciousPrompt, Model
-from env_vars_helpers import DATABASE_URL
+from env_vars_helpers import DATABASE_URL, SYNC_DATABASE_URL
 
 async_engine = create_async_engine(DATABASE_URL)
 AsyncSessionLocal = sessionmaker(bind=async_engine, class_=AsyncSession, expire_on_commit=False)
@@ -29,16 +31,20 @@ class MaliciousEmbeddingManager:
         self.embedding_model = get_embedding_class(embedding_model_name)()
         self.model_name = getattr(self.embedding_model, 'model_name', 
                                        getattr(self.embedding_model, 'model', 'default_collection_name'))
-        
         self.collection_name = "malicious_prompt_embeddings"
         self.vectorstore = PGVector(
-            connection_string=DATABASE_URL,
-            embedding_function=self.embedding_model,
+            connection=SYNC_DATABASE_URL,
+            embeddings=self.embedding_model,
             collection_name=self.collection_name,
+            distance_strategy=DistanceStrategy.COSINE,
+            create_extension=False
             )
-        self.retriever = self.pg_vector.as_retriever()
+        #self.retriever = self.vectorstore.as_retriever()
         self.tokenizer = MaliciousEmbeddingTokenizer()
-        self.malicious_prompt_similarity_threshold = float(os.getenv("MALICIOUS_PROMPT_SIMILARITY_THRESHOLD"),0.95)
+        self.malicious_prompt_similarity_threshold = float(os.getenv("MALICIOUS_PROMPT_SIMILARITY_THRESHOLD"))
+        
+    async def initialize(self):
+        self.model_id = await self.get_model_id()
         print("finished creating embedding manager")
 
     def get_embedding_type(self):
@@ -46,7 +52,7 @@ class MaliciousEmbeddingManager:
     
     async def load_initial_prompts(self, csv_file_path: str = 'malicious_prompts.csv'):
         """Load initial prompts from a CSV file and embed them."""
-        model_id = await self.get_model_id()  # Ensures you have the model ID
+        print("model_id is", self.model_id)
 
         # Read prompts from CSV
         prompts = []
@@ -55,14 +61,16 @@ class MaliciousEmbeddingManager:
             next(reader)  # Skip the header if there is one
             for row in reader:
                 if row:  # Ensure the row is not empty
-                    prompts.append(row[0])  # Assumes each row has a prompt in the first column
-
+                    cleaned_prompt = self.tokenizer.clean_prompt(row[0])
+                    prompts.append(cleaned_prompt)  # Assumes each row has a prompt in the first column
+        
+        # Save prompts in the db, then
         # Embed documents
         if prompts:
-            metadatas = [{'model': model_id} for _ in prompts]
-            await self.embed_documents(prompts, metadatas)
+            prompt_ids = [await self.upsert_malicious_prompt(prompt) for prompt in prompts]
+            await self.embed_documents(malicious_prompts=prompts, malicious_prompt_ids=prompt_ids)
 
-    async def get_model_id(self):
+    async def get_model_id(self) -> int:
         async with AsyncSessionLocal() as session:
             result = await session.execute(select(Model).filter_by(model_name=self.model_name))
             model = result.scalars().first()
@@ -76,7 +84,7 @@ class MaliciousEmbeddingManager:
     async def embed_malicious_prompts(self, malicious_prompts: List[str]):
         new_prompt_ids = []
         new_prompts = []
-        model_id = await self.get_model_id()
+        
         for prompt in malicious_prompts:
             prompt_id = self.upsert_malicious_prompt(prompt)
             
@@ -85,7 +93,7 @@ class MaliciousEmbeddingManager:
                 collection = self.vectorstore.get_collection()
                 result = await session.execute(
                     select(collection).where(
-                    collection.metadata['model_id'].astext == str(model_id),
+                    collection.metadata['model_id'].astext == str(self.model_id),
                     collection.metadata['prompt_id'].astext == str(prompt_id)
                 )
                 )
@@ -121,8 +129,8 @@ class MaliciousEmbeddingManager:
         # upload the embeddings here more efficiently
         self.vectorstore.add_embeddings(texts=malicious_prompts, embeddings=embeddings, metadatas=metadatas)
 
-    def similarity_search_with_filters(self, query: str, filter: dict, top_k: int = 1):
-        return self.retriever.similarity_search(query=query, filter=filter, k=top_k)
+    def similarity_search_with_score_and_filters(self, query: str, filter: dict, top_k: int = 1):
+        return self.vectorstore.similarity_search_with_score(query=query, filter=filter, k=top_k)
 
     #TODO: Add active_learning_mode, which will embed and store the prompt if it meets the similarity threshold
     def check_for_malicious_content(self, message: str) -> bool:
@@ -131,10 +139,12 @@ class MaliciousEmbeddingManager:
         embedding, and querying a pgvector database.
         """
         tokens = self.tokenizer.tokenize_user_input_to_set(message)
+        print(tokens)
         for token in tokens:
-            results = self.similarity_search_with_filters(query=token, filter={'model': self.model_name}, knns=1)
+            results = self.similarity_search_with_score_and_filters(query=token, filter={'model_id': self.model_id}, top_k=1)
             if results:
-                if any(result['score'] >= self.malicious_prompt_similarity_threshold for result in results):
+                print("results", results)
+                if any(result[1] <= self.malicious_prompt_similarity_threshold for result in results):
                     return True
         return False
 
@@ -142,14 +152,17 @@ class MaliciousEmbeddingManager:
 class MaliciousEmbeddingTokenizer:
 
     def __init__(self):
-        self.min_token_length = os.getenv("MIN_TOKEN_LENGTH")
-        self.max_token_length = os.getenv("MAX_TOKEN_LENGTH")
-        self.token_shift = os.getenv("TOKEN_SHIFT")
+        self.min_token_length = int(os.getenv("MIN_TOKEN_LENGTH"))
+        self.max_token_length = int(os.getenv("MAX_TOKEN_LENGTH"))
+        self.token_shift = int(os.getenv("TOKEN_SHIFT"))
 
-    def tokenize_user_input_to_set(self, input: str) -> List[str]:
+    def clean_prompt(self, input: str) -> str:
         # Remove punctuation from the text
         translator = str.maketrans('', '', string.punctuation)
-        cleaned_text = input.translate(translator).lower()
+        return input.translate(translator).lower()
+
+    def tokenize_user_input_to_set(self, input: str) -> List[str]:
+        cleaned_text = self.clean_prompt(input)
         
         # Split the text into words
         words = cleaned_text.split()

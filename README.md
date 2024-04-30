@@ -8,11 +8,15 @@ pip install openai --upgrade
 pip install flask requests python-dotenv
 ```
 
-2. 
+2. Start Postgres
+```
+psql -U <postgres> -h localhost -p 5432 -W
+# replace <postgres> with the usename of the postgres installation
+```
 
 2. Start the app
 ```
-python -m flask --app run.py run
+python -m main
 ```
 
 # Acknowledgements

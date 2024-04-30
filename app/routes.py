@@ -1,5 +1,5 @@
-from database.malicious_embedding_manager import MaliciousEmbeddingManager
-from flask import Flask, render_template, request, session, jsonify
+from database.malicious_embedding_manager import AsyncSessionLocal, MaliciousEmbeddingManager
+from flask import Flask, render_template, request, session, jsonify, current_app
 from typing import Dict
 import asyncio
 
@@ -12,10 +12,6 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("CHAT_APP_SECRET_KEY")
 
-# Initialize and load prompts at startup, using singleton pattern
-embedding_manager = MaliciousEmbeddingManager()
-asyncio.run(embedding_manager.load_initial_prompts())
-
 chat_sessions: Dict[str, ChatSession] = {}
 
 @app.route("/")
@@ -27,6 +23,7 @@ def index():
 def chat():
     message: str = request.json['message']
     chat_session = _get_user_session()
+    embedding_manager = current_app.config.get('embedding_manager')
     response = ''
     if embedding_manager.check_for_malicious_content(message):  
         response = "The input prompt was flagged by our system as potentially malicious."

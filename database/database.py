@@ -1,6 +1,7 @@
 from sqlalchemy import UniqueConstraint, create_engine, Column, Integer, String, MetaData, Table, DateTime, func
 from databases import Database
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, Session
 
 
@@ -22,17 +23,16 @@ class MaliciousPrompt(Base):
     id = Column(Integer, primary_key=True)
     prompt = Column(String, unique=True)
 
-engine = create_engine(DATABASE_URL)
+# Change to asynchronous engine
+engine = create_async_engine(DATABASE_URL)
 
 async def init_db():
-    Base.metadata.create_all(bind=engine)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
+# Change to asynchronous session maker
+AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-def get_db() -> Session:
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+async def get_db():
+    async with AsyncSessionLocal() as session:
+        yield session
