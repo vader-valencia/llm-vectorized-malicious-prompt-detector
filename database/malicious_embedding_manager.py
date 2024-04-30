@@ -11,15 +11,13 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 
 import asyncio
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import text
+from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.future import select
 
-from database.database import MaliciousPrompt, Model
-from env_vars_helpers import DATABASE_URL, SYNC_DATABASE_URL
-
-async_engine = create_async_engine(DATABASE_URL)
-AsyncSessionLocal = sessionmaker(bind=async_engine, class_=AsyncSession, expire_on_commit=False)
+from database.database import AsyncSessionLocal, SessionLocal, MaliciousPrompt, Model
+from env_vars_helpers import SYNC_DATABASE_URL
 
 class MaliciousEmbeddingManager:
     
@@ -52,7 +50,6 @@ class MaliciousEmbeddingManager:
     
     async def load_initial_prompts(self, csv_file_path: str = 'malicious_prompts.csv'):
         """Load initial prompts from a CSV file and embed them."""
-        print("model_id is", self.model_id)
 
         # Read prompts from CSV
         prompts = []
@@ -67,8 +64,7 @@ class MaliciousEmbeddingManager:
         # Save prompts in the db, then
         # Embed documents
         if prompts:
-            prompt_ids = [await self.upsert_malicious_prompt(prompt) for prompt in prompts]
-            await self.embed_documents(malicious_prompts=prompts, malicious_prompt_ids=prompt_ids)
+            await self.embed_malicious_prompts(malicious_prompts=prompts)
 
     async def get_model_id(self) -> int:
         async with AsyncSessionLocal() as session:
@@ -86,15 +82,14 @@ class MaliciousEmbeddingManager:
         new_prompts = []
         
         for prompt in malicious_prompts:
-            prompt_id = self.upsert_malicious_prompt(prompt)
+            prompt_id = await self.upsert_malicious_prompt(prompt)
             
             # check to see if this combo of prompt_id & model_id exists for the `malicious_prompt_embeddings` table
-            async with AsyncSessionLocal() as session:
-                collection = self.vectorstore.get_collection()
-                result = await session.execute(
-                    select(collection).where(
-                    collection.metadata['model_id'].astext == str(self.model_id),
-                    collection.metadata['prompt_id'].astext == str(prompt_id)
+            with SessionLocal() as session:
+                result = session.execute(
+                    select(self.vectorstore.EmbeddingStore).where(
+                    self.vectorstore.EmbeddingStore.cmetadata['model_id'].astext == str(self.model_id),
+                    self.vectorstore.EmbeddingStore.cmetadata['malicious_prompt_id'].astext == str(prompt_id)
                 )
                 )
                 embedding_result = result.scalars().first()
@@ -105,7 +100,8 @@ class MaliciousEmbeddingManager:
                     new_prompts.append(prompt)
 
         # Call the method to do this efficiently
-        self.embed_documents(malicious_prompts=new_prompts, malicious_prompt_ids=new_prompt_ids)
+        if new_prompts and new_prompt_ids:
+            await self.embed_documents(malicious_prompts=new_prompts, malicious_prompt_ids=new_prompt_ids)
             
     async def upsert_malicious_prompt(self, prompt: str) -> int:
         async with AsyncSessionLocal() as session:
@@ -139,11 +135,9 @@ class MaliciousEmbeddingManager:
         embedding, and querying a pgvector database.
         """
         tokens = self.tokenizer.tokenize_user_input_to_set(message)
-        print(tokens)
         for token in tokens:
             results = self.similarity_search_with_score_and_filters(query=token, filter={'model_id': self.model_id}, top_k=1)
             if results:
-                print("results", results)
                 if any(result[1] <= self.malicious_prompt_similarity_threshold for result in results):
                     return True
         return False

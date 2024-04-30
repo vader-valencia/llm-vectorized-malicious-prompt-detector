@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, Session
 
 
-from env_vars_helpers import DATABASE_URL
+from env_vars_helpers import DATABASE_URL, SYNC_DATABASE_URL
 
 
 database = Database(DATABASE_URL)
@@ -25,6 +25,7 @@ class MaliciousPrompt(Base):
 
 # Change to asynchronous engine
 engine = create_async_engine(DATABASE_URL)
+sync_engine = create_engine(SYNC_DATABASE_URL)
 
 async def init_db():
     async with engine.begin() as conn:
@@ -32,7 +33,9 @@ async def init_db():
 
 # Change to asynchronous session maker
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+SessionLocal = sessionmaker(bind=sync_engine, autocommit=False, autoflush=False)
 
-async def get_db():
+async def get_async_db():
     async with AsyncSessionLocal() as session:
         yield session
+

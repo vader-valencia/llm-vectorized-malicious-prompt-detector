@@ -1,7 +1,7 @@
 import asyncio
 from sqlalchemy import text
 from app.routes import app
-from database.database import init_db, AsyncSessionLocal, get_db
+from database.database import init_db, AsyncSessionLocal, get_async_db
 from database.malicious_embedding_manager import MaliciousEmbeddingManager
 
 async def initialize_embedding_manager():
