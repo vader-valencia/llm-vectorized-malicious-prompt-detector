@@ -1,10 +1,15 @@
 List of TODO items, in relative priority order
 
-Shorter term: Testing
+Shorter term: Testing, Large Code Smells, Some extensibility to other models
 - Generate more malicious prompts to seed the database
 - Generate a few MSJ prompts for the major categories identified by the Anthropic paper (Abusive or fraudulent content, Deceptive or misleading content, Illegal or highly regulated goods or services content, and Violent, hateful, or threatening content) 
+- Make it portable via Docker
+- Refactor to remove largest code smells
+- Currently, the chat model only is set to run on GPT-3.5-Turbo. It should be expanded to other models
+
 
 Longer term: 
 - Add active learning -- when malicious prompt is identified, add either:
     - the full user input
     - the exact phrase identified 
+- Move UI to React

@@ -19,13 +19,14 @@ def index():
     chat_session = _get_user_session()
     return render_template("chat.html", conversation=chat_session.get_messages())
 
+
 @app.route('/chat', methods=['POST'])
 def chat():
-    message: str = request.json['message']
+    message = request.json['message']
+    checkMalicious = request.json.get('checkMalicious', False)
     chat_session = _get_user_session()
-    embedding_manager = current_app.config.get('embedding_manager')
     response = ''
-    if embedding_manager.check_for_malicious_content(message):  
+    if checkMalicious and current_app.config.get('embedding_manager').check_for_malicious_content(message):
         response = "The input prompt was flagged by our system as potentially malicious."
     else:
         response = chat_session.get_chatgpt_response(message)
