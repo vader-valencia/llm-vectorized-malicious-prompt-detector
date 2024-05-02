@@ -3,7 +3,7 @@ import csv
 from typing import List
 import string
 
-#from langchain_community.vectorstores.pgvector import PGVector
+from advertools import word_tokenize
 from langchain_postgres.vectorstores import PGVector, DistanceStrategy
 
 from langchain_community.embeddings import __getattr__ as get_embedding_class
@@ -146,12 +146,14 @@ class MaliciousEmbeddingManager:
 class MaliciousEmbeddingTokenizer:
 
     def __init__(self):
-        self.min_token_length = int(os.getenv("MIN_TOKEN_LENGTH"))
-        self.max_token_length = int(os.getenv("MAX_TOKEN_LENGTH"))
-        self.token_shift = int(os.getenv("TOKEN_SHIFT"))
+        token_lengths = os.getenv("TOKEN_LENGTHS", "5,7,10,12,15")
+        self.token_lengths = [int(length) for length in token_lengths.split(',')]
 
     def clean_prompt(self, input: str) -> str:
         # Remove punctuation from the text
+        # We assume a nefarious actor could try to separate out 
+        # the malicious instructions by various punctuations
+        # make it all lower case as well
         translator = str.maketrans('', '', string.punctuation)
         return input.translate(translator).lower()
 
@@ -162,11 +164,12 @@ class MaliciousEmbeddingTokenizer:
         words = cleaned_text.split()
         
         # Generate the token groups
-        tokenized_output = []
-        for size in range(self.min_token_length, self.max_token_length + 1):
-            for i in range(len(words) - size + 1):
-                tokenized_output.append(" ".join(words[i:i + size]))
-                i += self.token_shift - 1 
+        # Make this a set so that we don't 
+        # embed the same prompt twice
+        tokenized_output = set()
+        for size in self.token_lengths:
+            groups = word_tokenize(words, size)
+            for group in groups:
+                tokenized_output.add(group)
         
-        # As the user could have repeated phrases, return a set to prevent excessive use
-        return set(tokenized_output)
+        return tokenized_output
