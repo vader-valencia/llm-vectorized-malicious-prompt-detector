@@ -7,6 +7,7 @@ Shorter term: Testing, Large Code Smells, Some extensibility to other models
 - Refactor to remove largest code smells
 - Currently, the chat model only is set to run on GPT-3.5-Turbo. It should be expanded to other models
 
+
 Longer term: 
 - Add active learning -- when malicious prompt is identified, add either:
     - the full user input
