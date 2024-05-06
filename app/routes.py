@@ -33,7 +33,6 @@ def chat():
     return jsonify({"message": response})
 
 
-
 def _get_user_session() -> ChatSession:
     chat_session_id = session.get("chat_session_id")
     if chat_session_id:

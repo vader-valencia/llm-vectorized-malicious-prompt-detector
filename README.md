@@ -13,13 +13,14 @@ This project is a proof-of-concept (PoC), black box detector for few-or-many-sho
 The demo aims to reproduce the primary example highlighted by Anthropic in their paper. The demo first shows ChatGPT being tricked into providing some information that would be useful to a nefarious actor; then, once the Detector is applied via the toggle button, shows that the prompt is flagged as malicious.
 
 A `MALICIOUS_PROMPT_SIMILARITY_THRESHOLD` of 0.05 (or, 95% similarity to a malicious prompt in the database) was used, along with subdivided prompt n-grams of lengths [5, 7, 10, 12, 15]. The test was performed on GPT-3.5-Turbo (via Chat Completions API) using `text-embedding-ada-002`.
+
 ![MSJ Prompt Demo](demo.gif)
 
 ## Technical Details
 The project uses Flask and a simple html front-end. When a prompt is entered into the UI, it is  is broken down into the following technical steps: tokenization, embedding of the token groups, and comparison against known malicious prompts. 
 
 ### Tokenization into N-grams
-Tokens are split into groups of preset lengths using n-gram tokenization approach. The method used for this is [advertools' word_tokenizer](https://advertools.readthedocs.io/en/master/advertools.word_tokenize.html). Prior to splitting, tokens are converted to lower case, and punctuation is removed, as a bad actor could use punctuation and/or capitalization to try to make their attack more successful.
+Tokens are split into groups of preset lengths using n-gram tokenization approach. The methodology and function used for this is [advertools' word_tokenizer](https://advertools.readthedocs.io/en/master/advertools.word_tokenize.html). Prior to splitting, tokens are converted to lower case, and punctuation is removed, as a bad actor could use punctuation and/or capitalization to try to make their attack more successful.
 
 ### Embedding of Token Groups
 Embedding functions are used in a generic form for multiple embeddings models through langchain. Each group of tokens is embedded separately.

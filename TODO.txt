@@ -8,6 +8,7 @@ Shorter term: Testing, Large Code Smells, Some extensibility to other models
 - Currently, the chat model only is set to run on GPT-3.5-Turbo. It should be expanded to other models
 - Trim down requirements.txt, as this is what I have running for local (non-virtual) environment
 
+
 Longer term: 
 - Add active learning -- when malicious prompt is identified, add either:
     - the full user input

@@ -5,6 +5,7 @@ import string
 
 from langchain_postgres.vectorstores import PGVector, DistanceStrategy
 from advertools import word_tokenize
+
 from langchain_community.embeddings import __getattr__ as get_embedding_class
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
